@@ -18,100 +18,40 @@ import org.vpns.proxy.tcpip.IpHeader;
 
 public class Socket5Proxy extends Thread
 {
-	private HeaderHook hh;
-	private short port;
-	private Selector mSelector;
-	private ServerSocketChannel mServerSocketChannel;
-	public Socket5Proxy(HeaderHook hh)
-	{
-		this.hh = hh;
-		try
-		{
-			mServerSocketChannel = ServerSocketChannel.open();
-			mServerSocketChannel.configureBlocking(false);
-			mServerSocketChannel.bind(new InetSocketAddress(0));
-			mServerSocketChannel.register(mSelector = Selector.open(), SelectionKey.OP_ACCEPT);
-			port = (short)mServerSocketChannel.socket().getLocalPort();
-		}
-		catch (IOException e)
-		{}
+	private ServerSocket ss;
+	private ExecutorService service;
+	private boolean global_ssl;
+	public Socket5Proxy(boolean ssl){
+		global_ssl=ssl;
+		service=Executors.newFixedThreadPool(255);
 	}
-	public short getPort()
+
+	public void globalSsl(boolean p0)
 	{
-		return port;
+		global_ssl=p0;
+		LocalVpnService.write("Global_Ssl:".concat(String.valueOf(p0)));
 	}
 	@Override
 	public void run()
 	{
-		
-			while (true)
-			{
-				try{
-				int keys=mSelector.select();
-				if (keys <= 0)
-					continue;
-				Iterator<SelectionKey> iterator=mSelector.selectedKeys().iterator();
-				while (iterator.hasNext())
-				{
-					SelectionKey key=iterator.next();
-					iterator.remove();
-					if (key.isValid())
-					{
-						if (key.isAcceptable())
-						{
-							onAcceptable(key);
-						}
-						else if (key.isConnectable())
-						{
-
-							((Tunnel)key.attachment()).onConnectable(key);
-						}
-						else if (key.isReadable())
-						{
-							Object attach=key.attachment();
-							if (attach instanceof IpHeader)
-							{
-								TunnelFactory.wrap(mSelector, (IpHeader)attach).onReadable(key);
-							}
-							else
-							{
-								((Tunnel)key.attachment()).onReadable(key);
-							}
-						}
-						else if (key.isWritable())
-						{
-
-							((Tunnel)key.attachment()).onWriteAble(key);
-						}
-					}
-				}
+		try
+		{
+			ss = new ServerSocket(1080);
+			while(true){
+				service.submit(new ProxyExecute(ss.accept(),global_ssl));
+				if(isInterrupted())
+					throw new IOException();
+			}
 		}
 		catch (IOException e)
-		{}
+		{
+			try
+			{
+				ss.close();
+			}
+			catch (Exception ee)
+			{}
 		}
 	}
-	void onAcceptable(SelectionKey key) throws IOException
-	{
-		SocketChannel localChannel=mServerSocketChannel.accept();
-		ByteBuffer bb=ByteBuffer.allocateDirect(3);
-		localChannel.read(bb);
-		bb.flip();
-		bb.put(new byte[]{0x05,0x00});
-		bb.flip();
-		bb.limit(2);
-		localChannel.write(bb);
-		bb = ByteBuffer.allocate(20);
-		localChannel.read(bb);
-		//ip
-		IpHeader ih=TcpIp.parser(bb.array());
-		bb.flip();
-		bb.position(0);
-		bb.put(new byte[]{0x05,0x00,0x00,0x01});
-		bb.position(0);
-		localChannel.write(bb);
-		localChannel.configureBlocking(false);
-		localChannel.register(mSelector, SelectionKey.OP_READ, ih);
-		/*Tunnel tunnel=TunnelFactory.wrap(localChannel,key.selector());
-		 tunnel.connect(new InetSocketAddress("210.22.247.196",8091));*/
-	}
+	
 }

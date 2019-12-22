@@ -12,6 +12,12 @@ import java.net.UnknownHostException;
 import org.vpns.proxy.util.Arrays;
 import javax.net.ssl.SSLSocketFactory;
 import java.net.SocketImplFactory;
+import org.vpns.proxy.nethook.KingCard;
+import org.vpns.proxy.util.SslUtil;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.ByteArrayInputStream;
+import java.net.SocketException;
 
 public class ProxyExecute implements Runnable
 {
@@ -20,21 +26,20 @@ public class ProxyExecute implements Runnable
 	private Socket socket,remote;
 	private InputStream input,remoteInput;
 	private OutputStream output,remoteOutput;
-	private HeaderHook hh;
-	public ProxyExecute(Socket socket,HeaderHook hh)
+	private boolean http,ssl;
+	public ProxyExecute(Socket socket,boolean ssl)
 	{
 		this.socket = socket;
-		this.hh=hh;
-		
+		this.ssl=ssl;
 	}
 	@Override
 	public void run()
 	{
+		byte[] buff=new byte[20000];
 		try
 		{
-			byte[] buff=new byte[1024];
-			input=socket.getInputStream();
-			output=socket.getOutputStream();
+			input = socket.getInputStream();
+			output = socket.getOutputStream();
 			/**
 			 * 获取认证方法并通过认证 默认为无身份认证
 			 * 接受的三个参数分别是
@@ -52,158 +57,247 @@ public class ProxyExecute implements Runnable
 			output.write(VER);
 			output.flush();
 			//认证
-			
+
 			int end=input.read(buff);//ipheader
 			/*0 ver:socket版本(5) 
-				*1 cmd:sock命令码(1 tcp,2 bind,3 udp) 
-				*2 rsv:保留字段
-				*3 atyp:地址类型(ipv4 1,域名 3,ipv6 4)
-				*4 如果是域名，长度
-				*/
-			boolean tcp=buff[1]==1;
-			if(!tcp)return;
-			String host=findHost(buff[3],buff,4,end);
-			int port=ByteBuffer.wrap(buff,8,2).asShortBuffer().get()&0xffff;
-			for (int i = 4;i <= 9;i++) {
-				CONNECT_OK[i] = buff[i];
-				}
+			 *1 cmd:sock命令码(1 tcp,2 bind,3 udp) 
+			 *2 rsv:保留字段
+			 *3 atyp:地址类型(ipv4 1,域名 3,ipv6 4)
+			 *4 如果是域名，长度
+			 */
+			boolean tcp=buff[1] == 1;
+			if (!tcp)throw new IOException();
+			int port=ByteBuffer.wrap(buff, 8, 2).asShortBuffer().get() & 0xffff;
 			output.write(CONNECT_OK);
 			output.flush();
-			
-			/*if(true)
-			return;
-			sb = new StringBuilder();
-			StringBuilder line=new StringBuilder();
-			char value=0;
-			char old=0;
-			while ((value = (char)input.read()) != -1)
+			for (int i = 4;i <= 9;i++)
 			{
-				if (value == '\r' || value == '\n')
-				{
-					if (old == '\r' && value == '\n')
-						continue;
-					old = value;
-					if (line.length() == 0)
-					{
-						break;
-					}
-					//makeLine(line);
-					String hex=Arrays.bytes2Hex(line.toString().getBytes()).toString();
-					line.setLength(0);
-					sb.append("\r\n");
-					continue;
-				}
-				old = value;
-				sb.append(value);
-				line.append(value);
-				}
-			hh.onHeader(sb);//处理请求头*/
-			//连接外部网络
-			remote=new Socket();
-			//hh.protect(remote);
-			remote.connect(hh.getSocketAddress(new InetSocketAddress(host,port)));
-			remoteInput=remote.getInputStream();
-			remoteOutput=remote.getOutputStream();
-			Local2Remote l2r=new Local2Remote(input,remoteOutput);
+				CONNECT_OK[i] = buff[i];
+			}
+			end = input.read(buff);
+			if (end < 0)throw new IOException();
+			switch (buff[0])
+			{
+				case 'G':
+				case 'P':
+				case 'D':
+				case 'H':
+				case 'O':
+				case 'T':
+				case 'C':
+					if(!ssl){
+					http = true;
+					remote = new Socket();
+					LocalVpnService.Instance.protect(remote);
+					remote.connect(KingCard.getInstance().getHttpProxy());
+					break;}
+				case 0x16:
+				default:
+					http = false;
+					remote = new Socket();// SslUtil.getSslFactory().createSocket();
+					LocalVpnService.Instance.protect(remote);
+					remote.setKeepAlive(true);
+					remote.connect(KingCard.getInstance().getHttpsProxy());
+					break;
+					//default:throw new IOException();
+			}
+			remoteInput = remote.getInputStream();
+			remoteOutput = remote.getOutputStream();
+			String host=HttpHostHeaderParser.parseHost(buff, 0, end);
+			if (host == null)host = findHost(CONNECT_OK[3], CONNECT_OK, 4, CONNECT_OK.length);
+			Local2Remote l2r=new Local2Remote(input, remoteInput, remoteOutput, buff, end, host, port);
 			l2r.start();
-			Remote2Local r2l=new Remote2Local(remoteInput,output);
-			r2l.start();
 			l2r.join();
-			r2l.join();
-			remote.close();
-			socket.close();
+
 		}
 		catch (Exception e)
 		{}
-		
-	}
-	
-	public static String findHost(byte type,byte[] bArray, int begin,int end) throws UnknownHostException
-	{  
-		switch(type){
-			case 0x01://ipv4
+		finally
+		{
+			try
 			{
-				byte[] ip=new byte[4];
-				System.arraycopy(bArray,begin,ip,0,ip.length);
-				return InetAddress.getByAddress(ip).getHostAddress();
+				output.close();
+			}
+			catch (IOException e)
+			{}
+			try
+			{
+				input.close();
+			}
+			catch (IOException e)
+			{}
+			try
+			{
+				socket.close();
+			}
+			catch (IOException e)
+			{}
+			try
+			{
+				remote.close();
+			}
+			catch (Exception e)
+			{}
+			input = null;output = null;remoteInput = null;remoteOutput = null;
+			remote = null;
+			socket = null;
+		}
+
+	}
+
+	public static String findHost(byte type, byte[] bArray, int begin, int end) throws UnknownHostException
+	{  
+		switch (type)
+		{
+			case 0x01://ipv4
+				{
+					byte[] ip=new byte[4];
+					System.arraycopy(bArray, begin, ip, 0, ip.length);
+					return InetAddress.getByAddress(ip).getHostAddress();
 				}
 			case 0x04://ipv6
-			{
-			byte[] ip=new byte[16];
-				System.arraycopy(bArray,begin,ip,0,ip.length);
-			return InetAddress.getByAddress(ip).getHostAddress();
+				{
+					byte[] ip=new byte[16];
+					System.arraycopy(bArray, begin, ip, 0, ip.length);
+					return InetAddress.getByAddress(ip).getHostAddress();
 				}
 			case 0x03://host
-			return new String(bArray,begin+1,bArray[begin]);
+				return new String(bArray, begin + 1, bArray[begin]);
 		}
 		return null;
 	}
-	public static int findPort(byte[] bArray, int begin, int end)
-	{
-		int port = 0;
-		for (int i = begin;i <= end;i++)
-		{
-			port<<=8;
-			port|=bArray[begin]&0xff;
-			}
-		return port;
-	}
+	/*public static int findPort(byte[] bArray, int begin, int end)
+	 {
+	 int port = 0;
+	 for (int i = begin;i <= end;i++)
+	 {
+	 port <<= 8;
+	 port |= bArray[begin] & 0xff;
+	 }
+	 return port;
+	 }*/
 	class Local2Remote extends Thread
 	{
-		private InputStream input;
+		private InputStream input,remote;
 		private OutputStream output;
-		public Local2Remote(InputStream input,OutputStream output){
-			this.input=input;
-			this.output=output;
+		private byte[] buff=null;
+		private int count,port;
+		private String host;
+		public Local2Remote(InputStream input, InputStream remote, OutputStream output, byte[] buff, int len, String host, int port)
+		{
+			this.input = input;
+			this.remote = remote;
+			this.output = output;
+			this.buff = buff;
+			this.count = len;
+			this.host = host;
+			this.port = port;
 		}
 		@Override
 		public void run()
 		{
-			byte[] buff=new byte[1024];
+
 			try
 			{
-				int len=input.read(buff);
-				if(socket.getLocalPort()==1080){
-					String s=new String(buff);
-				}
-				
-				output.write(buff,0,len);
-				while((len=input.read(buff))!=-1){
-					output.write(buff,0,len);
-				}
-				output.flush();
-				/*if ((buff[0] != 71 || buff[1] != 69 || buff[3] != 32) && (buff[0] != 80 || buff[1] != 79 || buff[4] != 32))
+				StringBuilder header=new StringBuilder();
+				ByteArrayInputStream bi=new ByteArrayInputStream(buff, 0, count);
+				if (!http)
 				{
-					
-				}
-				else if (buff[0] != 67 || buff[1] != 79 || buff[7] != 32)
-				{
-					toString();
+					header.append(String.format("CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\nProxy-Connection: Keep-Alive\r\n", host, port, host, port));
 				}
 				else
 				{
-					toString();
+					//first
+					String line=null;
+					while ((line = readLine(bi).toString()) != null && line.length() > 0)
+					{
+						if (!line.startsWith("Q-GUID") && !line.startsWith("Q-Token") && !line.startsWith("Proxy-Authorization"))
+							header.append(line).append("\r\n");
+					}
 				}
-				String s=new String(buff);*/
+				header.append("Q-GUID: ".concat(KingCard.getInstance().getQUID()));
+				header.append("\r\n");
+				header.append("Q-Token: ".concat(KingCard.getInstance().getQTOKEN()));
+				header.append("\r\n");
+				header.append("\r\n");
+				String headers=header.toString();
+				output.write(headers.getBytes());
+				output.flush();
+				if (headers.startsWith("CONNECT"))
+				{
+					String line=null;
+					while ((line = readLine(remote).toString()) != null && line.length() != 0)
+					{
+
+					}
+				}
+				Remote2Local r2l=new Remote2Local(remoteInput, ProxyExecute.this.output);
+				r2l.start();
+				int len=-1;
+				while ((len = bi.read(buff)) != -1)
+				{
+					output.write(buff, 0, len);
+					output.flush();
+				}
+				//if(count>=buff.length||!http)
+				while ((len = input.read(buff)) != -1)
+					{
+						output.write(buff, 0, len);
+						output.flush();
+					}
+				r2l.join();
+
 			}
-			catch (IOException e)
+			catch (Exception e)
 			{}
+
 		}
-		
+		private StringBuilder readLine(InputStream input) throws IOException
+		{
+			StringBuilder sb=new StringBuilder();
+			while (true)
+			{
+				int v=input.read();
+				switch (v)
+				{
+					case -1:
+						return sb;
+					case '\r':
+						int n=input.read();
+						if (n == '\n')
+						{
+							return sb;
+						}
+						else if (n == -1)
+						{
+							return sb;
+						}
+						else
+						{
+							sb.append((char)n);
+							continue;
+						}
+					default:sb.append((char)v); 
+				}
+			}
+		}
 	}
-	class Remote2Local extends Thread{
+	class Remote2Local extends Thread
+	{
 		private InputStream input;
 		private OutputStream output;
-		public Remote2Local(InputStream input,OutputStream output){
-			this.input=input;
-			this.output=output;
+		private byte[] buff;
+		public Remote2Local(InputStream input, OutputStream output)
+		{
+			this.input = input;
+			this.output = output;
+			this.buff = new byte[10240];
 		}
 
 		@Override
 		public void run()
 		{
 			int len=-1;
-			byte[] buff=new byte[10240];
 			try
 			{
 				while ((len = input.read(buff)) != -1)
@@ -214,7 +308,8 @@ public class ProxyExecute implements Runnable
 			}
 			catch (IOException e)
 			{}
+
 		}
-		
+
 	}
 }

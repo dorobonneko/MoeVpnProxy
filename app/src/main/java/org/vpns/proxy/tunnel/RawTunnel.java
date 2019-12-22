@@ -10,16 +10,17 @@ public class RawTunnel extends Tunnel
 {
 	
 	private SocketChannel local;
+	private boolean readed;
 	@Override
 	public void onWriteAble(SelectionKey key) throws IOException
 	{
 		//隧道已建立
-		SocketChannel remote=(SocketChannel) key.channel();
+		/*SocketChannel remote=(SocketChannel) key.channel();
 		ByteBuffer buff=getByteBuffer();
 		buff.clear();
 		remote.read(buff);
 		buff.flip();
-		String s=new String(buff.array(),0,buff.limit());
+		String s=new String(buff.array(),0,buff.limit());*/
 	}
 
 	@Override
@@ -28,14 +29,18 @@ public class RawTunnel extends Tunnel
 		ByteBuffer buff=getByteBuffer();
 		buff.clear();
 		SocketChannel socket=(SocketChannel) key.channel();
-		if(socket.read(buff)>0){
+		int len=-1;
+		if((len=socket.read(buff))>0){
+			readed=true;
 			buff.flip();
+			if(buff.array()[0]=='H'){
 			String s=new String(buff.array(),0,buff.limit());
+			}
 			while(buff.hasRemaining())
 			this.local.write(buff);
 			buff.clear();
-			socket.register(key.selector(),SelectionKey.OP_READ,this);
-		}else{
+			key.interestOps(SelectionKey.OP_READ);
+		}else if(readed){
 		socket.shutdownOutput();
 		socket.shutdownInput();
 		socket.close();
@@ -43,6 +48,8 @@ public class RawTunnel extends Tunnel
 		local.shutdownOutput();
 		this.local.close();
 		key.cancel();
+		}else{
+			key.interestOps(SelectionKey.OP_READ);
 		}
 	}
 

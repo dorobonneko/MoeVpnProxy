@@ -4,8 +4,11 @@ import java.util.Locale;
 
 
 public class HttpHostHeaderParser {
-
-	public static boolean canParse(byte data) {
+	public static final int HTTP=0;
+	public static final int HTTPS=1;
+	public static final int UNKOWN=3;
+	public static final int SSL=4;
+	public static int parse(byte data) {
         switch (data) {
                 case 'G'://GET
                 case 'H'://HEAD
@@ -13,12 +16,14 @@ public class HttpHostHeaderParser {
                 case 'D'://DELETE
                 case 'O'://OPTIONS
                 case 'T'://TRACE
-                case 'C'://CONNECT
-				return true;
+                return HTTP;
+				case 'C'://CONNECT
+				return HTTPS;
                 case 0x16://SSL 
-				return false;
+				return SSL;
+				
             }
-        return false;
+        return UNKOWN;
     }
     public static String parseHost(byte[] buffer, int offset, int count) {
         try {

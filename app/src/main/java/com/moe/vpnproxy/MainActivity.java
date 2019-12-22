@@ -8,14 +8,32 @@ import android.widget.CompoundButton;
 import android.net.VpnService;
 import android.content.Intent;
 import org.vpns.proxy.core.LocalVpnService;
+import android.view.View;
+import java.net.URL;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import javax.net.ssl.HttpsURLConnection;
+import org.vpns.proxy.util.SslUtil;
+import java.io.InputStream;
+import android.widget.TextView;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.view.ViewGroup;
+import android.content.IntentFilter;
+import com.moe.vpnproxy.util.Preference;
+import android.view.MenuItem;
 
 public class MainActivity extends Activity implements Switch.OnCheckedChangeListener
 {
+	private TextView msg;
+	private Message message;
     @Override
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+		msg=findViewById(R.id.msg);
+		registerReceiver(message=new Message(),new IntentFilter(getPackageName().concat(".Write")));
     }
 
 	@Override
@@ -25,7 +43,20 @@ public class MainActivity extends Activity implements Switch.OnCheckedChangeList
 		Switch switch_=(Switch) menu.findItem(R.id.switch_).getActionView();
 		switch_.setChecked(LocalVpnService.isRunning());
 		switch_.setOnCheckedChangeListener(this);
+		menu.findItem(R.id.global_ssl).setChecked(Preference.is(this,"ssl",true));
 		return true;
+	}
+
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item)
+	{
+		switch(item.getItemId()){
+			case R.id.global_ssl:
+				item.setChecked(!item.isChecked());
+				Preference.put(this,"ssl",item.isChecked());
+				break;
+		}
+		return super.onOptionsItemSelected(item);
 	}
 
 	@Override
@@ -37,7 +68,8 @@ public class MainActivity extends Activity implements Switch.OnCheckedChangeList
 				else
 				onActivityResult(5844,RESULT_OK,null);
 		}else{
-			stopService(new Intent(this,LocalVpnService.class));
+			LocalVpnService.Instance.stopVpn();
+			//stopService(new Intent(this,LocalVpnService.class));
 		}
 	}
 
@@ -51,5 +83,23 @@ public class MainActivity extends Activity implements Switch.OnCheckedChangeList
 		}
 	}
 
+	@Override
+	protected void onDestroy()
+	{
+		unregisterReceiver(message);
+		super.onDestroy();
+	}
+	
+	class Message extends BroadcastReceiver
+	{
+
+		@Override
+		public void onReceive(Context p1, Intent p2)
+		{
+			msg.setText(msg.getText()+"\n"+p2.getStringExtra(p2.getAction()));
+		}
+
+	
+}
 	
 }

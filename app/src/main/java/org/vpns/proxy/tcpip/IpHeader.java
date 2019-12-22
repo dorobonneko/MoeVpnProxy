@@ -49,4 +49,10 @@ public class IpHeader
 				}
 		return ByteBuffer.wrap(data,offset+1,offset+3).asShortBuffer().get();
 	}
+	public boolean isTcp(){
+		return get(CMD)==1;
+	}
+	public boolean isUdp(){
+		return get(CMD)==3;
+	}
 }

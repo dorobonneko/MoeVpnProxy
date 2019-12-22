@@ -5,5 +5,13 @@
         android:title="Item"
 		android:showAsAction="always"
 		android:actionViewClass="android.widget.Switch"/>
-    
+    <item
+		android:id="@+id/global_ssl"
+		android:title="全局https"
+		android:checkable="true"/>
+	<item
+		android:id="@+id/enable_udp"
+		android:title="启用UDP"
+		android:checkable="true"
+		android:enabled="false"/>
 </menu>

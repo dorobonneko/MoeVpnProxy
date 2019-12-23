@@ -14,4 +14,7 @@
 		android:title="启用UDP"
 		android:checkable="true"
 		android:enabled="false"/>
+	<item
+		android:id="@+id/api"
+		android:title="接口"/>
 </menu>

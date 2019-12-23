@@ -22,6 +22,9 @@ import android.view.ViewGroup;
 import android.content.IntentFilter;
 import com.moe.vpnproxy.util.Preference;
 import android.view.MenuItem;
+import android.widget.EditText;
+import org.vpns.proxy.nethook.KingCard;
+import android.content.DialogInterface;
 
 public class MainActivity extends Activity implements Switch.OnCheckedChangeListener
 {
@@ -54,6 +57,18 @@ public class MainActivity extends Activity implements Switch.OnCheckedChangeList
 			case R.id.global_ssl:
 				item.setChecked(!item.isChecked());
 				Preference.put(this,"ssl",item.isChecked());
+				break;
+			case R.id.api:
+				final EditText et=new EditText(this);
+				et.setText(Preference.get(this,"api",KingCard.Api));
+				new AlertDialog.Builder(this).setTitle("接口").setView(et).setNegativeButton("保存", new DialogInterface.OnClickListener(){
+
+						@Override
+						public void onClick(DialogInterface p1, int p2)
+						{
+							Preference.put(getApplicationContext(),"api",et.getText().toString().trim());
+						}
+					}).show();
 				break;
 		}
 		return super.onOptionsItemSelected(item);

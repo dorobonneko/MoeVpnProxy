@@ -47,6 +47,10 @@ public class LocalVpnService extends VpnService implements Runnable,SharedPrefer
 				if(proxy!=null)
 					proxy.globalSsl(p1.getBoolean(p2,true));
 				break;
+			case "api":
+				KingCard.Api=p1.getString(p2,KingCard.Api);
+				KingCard.stop();
+				break;
 		}
 	}
 

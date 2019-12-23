@@ -18,6 +18,7 @@ public class KingCard extends TimerTask
 	private String uid="",token="";
 	private boolean finish;
 	private Timer mTimer=new Timer();
+	public static String Api="https://gitee.com/r0x/WK/raw/master/wk.htm";
 	private KingCard()
 	{
 		mTimer.schedule(this, 0, 90 * 60 * 1000);
@@ -66,7 +67,7 @@ public class KingCard extends TimerTask
 	}
 	public Uri getApi()
 	{
-		return Uri.parse("https://gitee.com/r0x/WK/raw/master/wk.htm");
+		return Uri.parse(KingCard.Api);
 	}
 	@Override
 	public void run()

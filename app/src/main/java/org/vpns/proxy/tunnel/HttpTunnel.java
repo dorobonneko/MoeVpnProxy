@@ -1,143 +1,120 @@
 package org.vpns.proxy.tunnel;
-import java.nio.channels.Selector;
-import java.nio.channels.SocketChannel;
-import java.nio.ByteBuffer;
-import org.vpns.proxy.tcpip.IpHeader;
-import java.nio.channels.SelectionKey;
+import java.net.Socket;
+import java.io.InputStream;
 import java.io.IOException;
-import org.vpns.proxy.core.HttpHostHeaderParser;
-import java.net.InetSocketAddress;
+import android.text.TextUtils;
+import org.vpns.proxy.nethook.KingCard;
 import org.vpns.proxy.core.LocalVpnService;
+import org.vpns.proxy.util.Stream;
+import org.vpns.proxy.net.HttpResponse;
 
-public class HttpTunnel extends Tunnel
+public class HttpTunnel extends Thread
 {
-	private SocketChannel remote,local;
-	private Tunnel raw;
-	private ByteBuffer bb=ByteBuffer.allocate(1024);
-
-	@Override
-	public void onWriteAble(SelectionKey key) throws IOException
-	{
-		bb.clear();
-		if (remote.read(bb) > 0)
-		{
-			if(bb.array()[0]!=72){
-				String s=new String(bb.array(),0,bb.position());
-			}
-			SocketChannel local=(SocketChannel) key.channel();
-			ByteBuffer buff=getByteBuffer();
-			buff.position(0);
-			remote.write(buff);
-			buff.clear();
-			while (local.read(buff) > 0)
-			{
-				buff.flip();
-				remote.write(buff);
-				buff.clear();
-			}
-			remote.register(getSelector(), SelectionKey.OP_READ, raw);
-			key.cancel();
-		}
-		else
-		{
-			key.interestOps(SelectionKey.OP_WRITE);
-		}
+	private StringBuilder header=null;
+	private Socket socket;
+	public HttpTunnel(int type,Socket socket){
+		header=new StringBuilder();
+		header.append((char)type);
+		this.socket=socket;
 	}
 
 	@Override
-	public void onReadable(SelectionKey key) throws IOException
+	public void start()
 	{
-		local = (SocketChannel) key.channel();
-		ByteBuffer buff=getByteBuffer();
-		buff.clear();
-		int size=local.read(buff);
-		if (size <= 0)return;
-		buff.flip();
-		buff.mark();
-		//判断http还是https
-		switch (HttpHostHeaderParser.parse(buff.get()))
-		{
-			case HttpHostHeaderParser.HTTP:
-				remote = SocketChannel.open();
-				raw = new RawTunnel(local, getSelector(), null);
-				remote.configureBlocking(false);
-				String ip=getIpHeader().getIp();
-				int port=getIpHeader().getPort() & 0xffff;
-				LocalVpnService.Instance.protect(remote.socket());
-				remote.connect(new InetSocketAddress(ip, port));
-				remote.register(getSelector(), SelectionKey.OP_CONNECT, this);
-				break;
-			case HttpHostHeaderParser.SSL:
-			case HttpHostHeaderParser.HTTPS:
-				remote = SocketChannel.open();
-				raw = new RawTunnel(local, getSelector(), null);
-
-				remote.configureBlocking(false);
-				LocalVpnService.Instance.protect(remote.socket());
-				remote.connect(new InetSocketAddress("101.71.140.5", 8128));
-				remote.register(getSelector(), SelectionKey.OP_CONNECT, this);
-				break;
-			default:
-				key.cancel();
-				local.close();
-				return;
-		}
-		buff.reset();
+		// TODO: Implement this method
+		super.start();
+		
 	}
 
 	@Override
-	public void onConnectable(SelectionKey key) throws IOException
+	public void run()
 	{
-		SocketChannel remote=(SocketChannel) key.channel();
-		while (!remote.finishConnect());
-		ByteBuffer buff=getByteBuffer();
-		buff.position(0);
-		switch (HttpHostHeaderParser.parse(buff.get()))
+		Socket remote=null;
+		try
 		{
-			case HttpHostHeaderParser.HTTP:
-				StringBuilder sb=new StringBuilder();
-				buff.position(0);
-				while (buff.hasRemaining())
-					remote.write(buff);
-				sb.append(new String(buff.array(), 0, buff.limit()));
-				buff.clear();
-				while (local.read(buff) > 0)
-				{
-					buff.flip();
-					while (buff.hasRemaining())
-						remote.write(buff);
-					buff.clear();
+			remote=new Socket();
+			remote.setKeepAlive(false);
+			LocalVpnService.Instance.protect(remote);
+			remote.connect(KingCard.getInstance().getHttpProxy());
+			//获取头长度再处理
+			HttpResponse r2l=new HttpResponse(remote.getInputStream(),socket.getOutputStream());
+			r2l.start();
+			long content_length=0l;
+			StringBuilder headers=new StringBuilder();
+			while(!TextUtils.isEmpty(readLine(socket.getInputStream()))){
+				String line=header.toString().trim();
+				if (!line.startsWith("Q-GUID") && !line.startsWith("Q-Token") && !line.startsWith("Proxy-Authorization")){
+				headers.append(header).append("\r\n");
 				}
-				remote.register(getSelector(), SelectionKey.OP_READ, raw);
-				break;
-			case HttpHostHeaderParser.HTTPS:
-				break;
-			case HttpHostHeaderParser.SSL:
-				String ip=HttpHostHeaderParser.parseHost(buff.array(), 0, buff.limit());
-				if (ip == null)ip = getIpHeader().getIp();
-				int port=getIpHeader().getPort() & 0xffff;
-				byte[] request = String.format("CONNECT %s:%d HTTP/1.1\r\nHost: %s\r\nProxy-Connection: keep-alive\r\nProxy-Authorization: Basic dWMxMC44NC4xNi4xOTM6MWY0N2QzZWY1M2IwMzU0NDM0NTFjN2VlNzg3M2ZmMzg=\r\n\r\n", ip, port, ip).getBytes();
-				ByteBuffer request_buff=ByteBuffer.wrap(request);
-				remote.write(request_buff);
-				request_buff.clear();
-				local.register(getSelector(), SelectionKey.OP_WRITE, this);
-				break;
-			default:
-				remote.close();
-				local.close();
-				key.cancel();
-				break;
+				if(line.startsWith("Content-Length:"))
+				content_length=Long.parseLong(line.substring(15).trim());
+				header.setLength(0);
+			}
+			headers.append("Q-GUID: ".concat(KingCard.getInstance().getQUID()));
+			headers.append("\r\n");
+			headers.append("Q-Token: ".concat(KingCard.getInstance().getQTOKEN()));
+			headers.append("\r\n\r\n");
+			//headers.append("Proxy-Connection: Keep-Alive\r\n\r\n");
+			
+			remote.getOutputStream().write(headers.toString().getBytes());
+			remote.getOutputStream().flush();
+			
+			if(content_length>0){
+			Stream l2r=new Stream(socket.getInputStream(),remote.getOutputStream(),content_length);
+			l2r.start();
+			
+			l2r.join();
+			}
+			r2l.join();
 		}
-
+		catch (Exception e)
+		{}finally{
+			try
+			{
+				if (remote != null){
+					remote.close();
+					}
+			}
+			catch (IOException e)
+			{}
+			try
+			{
+				if (socket != null){
+					socket.close();
+					}
+			}
+			catch (IOException e)
+			{}
+		}
 	}
-
-
-
-
-	public HttpTunnel(Selector selector, IpHeader ipHeader)
+	
+	private StringBuilder readLine(InputStream input) throws IOException
 	{
-		super(selector, ipHeader);
+		while (true)
+		{
+			int v=input.read();
+			switch (v)
+			{
+				case -1:
+					return header;
+				case '\r':
+					int n=input.read();
+					if (n == '\n')
+					{
+						return header;
+					}
+					else if (n == -1)
+					{
+						return header;
+					}
+					else
+					{
+						header.append((char)n);
+						continue;
+					}
+				default:header.append((char)v); 
+			}
+		}
 	}
-
-
+	
 }

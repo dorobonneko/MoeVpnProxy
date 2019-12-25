@@ -1,20 +1,9 @@
 package org.vpns.proxy.core;
-import java.net.ServerSocket;
+import java.util.concurrent.*;
+
 import java.io.IOException;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
-import java.nio.channels.ServerSocketChannel;
-import java.net.InetSocketAddress;
-import java.nio.channels.Selector;
-import java.nio.channels.SelectionKey;
-import java.util.Iterator;
-import java.nio.channels.SocketChannel;
-import org.vpns.proxy.tunnel.Tunnel;
-import org.vpns.proxy.tunnel.TunnelFactory;
-import java.nio.ByteBuffer;
-import org.vpns.proxy.tcpip.TcpIp;
-import org.vpns.proxy.tcpip.IpHeader;
+import java.net.ServerSocket;
+import java.net.Socket;
 
 public class Socket5Proxy extends Thread
 {
@@ -23,7 +12,7 @@ public class Socket5Proxy extends Thread
 	private boolean global_ssl;
 	public Socket5Proxy(boolean ssl){
 		global_ssl=ssl;
-		service=Executors.newFixedThreadPool(255);
+		service=Executors.newCachedThreadPool();
 	}
 
 	public void globalSsl(boolean p0)
@@ -38,9 +27,12 @@ public class Socket5Proxy extends Thread
 		{
 			ss = new ServerSocket(1080);
 			while(true){
-				service.submit(new ProxyExecute(ss.accept(),global_ssl));
+				Socket socket=ss.accept();
+				if(socket!=null)
+				service.submit(new ProxyExecute(socket,global_ssl));
 				if(isInterrupted())
 					throw new IOException();
+				
 			}
 		}
 		catch (IOException e)
@@ -51,6 +43,7 @@ public class Socket5Proxy extends Thread
 			}
 			catch (Exception ee)
 			{}
+			service.shutdown();
 		}
 	}
 	

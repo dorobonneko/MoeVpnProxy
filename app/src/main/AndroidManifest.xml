@@ -3,6 +3,9 @@
     package="com.moe.vpnproxy" >
 <uses-permission android:name="android.permission.CONTROL_VPN"/>
 	<uses-permission android:name="android.permission.INTERNET" />
+	<uses-permission
+		android:name="android.permission.INTERACT_ACROSS_USERS"/>
+	
     <application
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"

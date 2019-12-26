@@ -70,6 +70,10 @@ public class MainActivity extends Activity implements Switch.OnCheckedChangeList
 						}
 					}).show();
 				break;
+			case R.id.reloadToken:
+				if(LocalVpnService.isRunning())
+					KingCard.getInstance().refresh();
+				break;
 		}
 		return super.onOptionsItemSelected(item);
 	}

@@ -32,7 +32,12 @@ public class KingCard extends TimerTask
 	public static String Api="https://gitee.com/r0x/WK/raw/master/wk.htm";
 	private KingCard(Context context)
 	{
-		}
+	}
+
+	public void refresh()
+	{
+		new Thread(this).start();
+	}
 	public static void init(Context context){
 		kc=new KingCard(context);
 	}

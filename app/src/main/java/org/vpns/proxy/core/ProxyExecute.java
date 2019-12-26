@@ -20,6 +20,7 @@ import java.io.ByteArrayInputStream;
 import java.net.SocketException;
 import org.vpns.proxy.tunnel.Tunnel;
 import org.vpns.proxy.tunnel.HttpTunnel;
+import java.io.ByteArrayOutputStream;
 
 public class ProxyExecute implements Runnable
 {
@@ -59,7 +60,7 @@ public class ProxyExecute implements Runnable
 				input.read(new byte[2]);
 			}else{
 				throw new IOException();
-			};//0x05 0x01 0x00
+			}//0x05 0x01 0x00
 			output.write(VER);
 			output.flush();
 			//认证
@@ -77,31 +78,44 @@ public class ProxyExecute implements Runnable
 			int port=ByteBuffer.wrap(new byte[]{(byte)(input.read()&0xff),(byte)(input.read()&0xff)}).asShortBuffer().get() & 0xffff;
 			output.write(CONNECT_OK);
 			output.flush();
-			if(cmd==1){
+			if(!ssl&&cmd==1){
 				int type=input.read();
+				ByteArrayOutputStream cache=new ByteArrayOutputStream();
+				cache.write(type);
 			switch(type){
-				case 'G':
-				case 'P':
-				case 'D':
-				case 'H':
-				case 'O':
-				case 'T':
+				case 'G':read(input,cache,2);break;
+				case 'P':read(input,cache,2);break;
+				case 'D':read(input,cache,5);break;
+				case 'H':read(input,cache,3);break;
+				case 'O':read(input,cache,6);break;
+				case 'T':read(input,cache,4);break;
 				//case 'C':
-				if(!ssl){
-					HttpTunnel ht=new HttpTunnel(type,socket);
-					ht.start();
-					break;
-					}
 				case 0x16:
 				case 'C':
 					default:
-					Tunnel t=new Tunnel(new byte[]{(byte)(type&0xff)},host,port,socket);
-					t.start();
-					break;
+					Tunnel t=new Tunnel(cache.toByteArray(),host,port,socket);
+					t.run();
+					return;
 			}
+			switch(cache.toString()){
+				case "GET":
+				case "PUT":
+				case "POS":
+				case "DELETE":
+				case "OPTIONS":
+				case "TRACK":
+					HttpTunnel ht=new HttpTunnel(cache.toByteArray(),socket);
+					ht.run();
+					break;
+				default:
+					Tunnel t=new Tunnel(cache.toByteArray(),host,port,socket);
+					t.run();
+				break;
+			}
+			cache.close();
 			}else{
 			Tunnel t=new Tunnel(new byte[0],host,port,socket);
-			t.start();
+			t.run();
 			}
 			
 		}
@@ -121,7 +135,16 @@ public class ProxyExecute implements Runnable
 		}
 
 	}
-
+	private void read(InputStream i,OutputStream o,int size) throws IOException{
+		byte[] buff=new byte[size];
+		int len=-1,read=0;
+		while((len=i.read(buff,read,size))!=-1){
+			o.write(buff);
+			read+=len;
+			if(read>=size)
+				break;
+		}
+	}
 	public static String findHost(InputStream input) throws IOException
 	{  
 		switch (input.read())

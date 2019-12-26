@@ -16,7 +16,7 @@ public class Stream extends Thread
 	@Override
 	public void run()
 	{
-		byte[] buff=new byte[10240];
+		byte[] buff=new byte[20240];
 		int len=-1;
 		long length=0;
 		try
@@ -24,10 +24,10 @@ public class Stream extends Thread
 			while ((len = input.read(buff)) != -1)
 			{
 				output.write(buff,0,len);
-				output.flush();
 				length+=len;
 				if(length>=size)break;
 			}
+			output.flush();
 			}
 		catch (IOException e)
 		{try
@@ -37,18 +37,18 @@ public class Stream extends Thread
 			catch (Exception ee)
 			{}
 			}finally{
-				try
-				{
-					output.close();
-				}
-				catch (IOException e)
-				{}
-				try
-				{
-					input.close();
-				}
-				catch (IOException e)
-				{}
+//				try
+//				{
+//					output.close();
+//				}
+//				catch (IOException e)
+//				{}
+//				try
+//				{
+//					input.close();
+//				}
+//				catch (IOException e)
+//				{}
 			}
 	}
 

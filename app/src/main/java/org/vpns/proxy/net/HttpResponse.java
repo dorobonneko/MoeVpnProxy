@@ -4,6 +4,7 @@ import java.io.OutputStream;
 import java.io.IOException;
 import android.text.TextUtils;
 import org.vpns.proxy.util.Stream;
+import java.io.ByteArrayOutputStream;
 
 public class HttpResponse extends Thread
 {
@@ -21,38 +22,37 @@ public class HttpResponse extends Thread
 	{
 		String line=null;
 		long content_length=-1;
+		boolean isChunkded=false;
+		ByteArrayOutputStream baos=new ByteArrayOutputStream();
 		try
 		{
 			while (!TextUtils.isEmpty(line = readLine(input).toString()))
 			{
 				if (line.startsWith("Content-Length:"))
 					content_length = Long.parseLong(line.substring(15).trim());
-				output.write(line.getBytes());
-				output.write(crlf);
+				else if(line.startsWith("Transfer-Encoding:"))
+					isChunkded=line.contains("chunked");
+				baos.write(line.getBytes());
+				baos.write(crlf);
 			}
-			output.write(crlf);
+			baos.write(crlf);
+			baos.flush();
+			output.write(baos.toByteArray());
 			output.flush();
+			baos.close();
+			if(isChunkded){
+				Chunked chunked=new Chunked(input,output);
+				chunked.process();
+			}else
 			if (content_length > 0)
 			{
 				Stream s=new Stream(input, output, content_length);
-				s.start();
-				try
-				{
-					s.join();
-				}
-				catch (InterruptedException e)
-				{}
+				s.run();
 			}
 			else if(content_length==-1)
 			{
 				Stream s=new Stream(input, output, Long.MAX_VALUE);
-				s.start();
-				try
-				{
-					s.join();
-				}
-				catch (InterruptedException e)
-				{}
+				s.run();
 			}
 		}
 		catch (IOException e)

@@ -51,7 +51,7 @@ public class KingCard extends TimerTask
 	}
 	public InetSocketAddress getHttpProxy()
 	{
-		return new InetSocketAddress("157.255.173.185", 8090);
+		return new InetSocketAddress("210.22.247.196", 8090);
 	}
 	public InetSocketAddress getHttpsProxy()
 	{

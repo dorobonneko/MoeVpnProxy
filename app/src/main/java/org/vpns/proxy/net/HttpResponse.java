@@ -5,6 +5,7 @@ import java.io.IOException;
 import android.text.TextUtils;
 import org.vpns.proxy.util.Stream;
 import java.io.ByteArrayOutputStream;
+import org.vpns.proxy.core.LocalVpnService;
 
 public class HttpResponse extends Thread
 {
@@ -16,6 +17,8 @@ public class HttpResponse extends Thread
 		this.input = input;
 		this.output = output;
 	}
+
+	
 
 	@Override
 	public void run()

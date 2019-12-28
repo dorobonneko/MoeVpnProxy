@@ -10,6 +10,7 @@ import org.vpns.proxy.net.HttpResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;
+import org.vpns.proxy.net.Chunked;
 
 public class HttpTunnel implements Runnable
 {
@@ -30,12 +31,14 @@ public class HttpTunnel implements Runnable
 		try
 		{
 			remote = new Socket();
+			remote.setTcpNoDelay(true);
 			remote.setKeepAlive(true);
 			LocalVpnService.Instance.protect(remote);
 			remote.connect(KingCard.getInstance().getHttpProxy());
 			//获取头长度再处理
 
 			long content_length=-1l;
+			boolean chunked=false;
 			StringBuilder headers=new StringBuilder();
 			while (!TextUtils.isEmpty(readLine(socket.getInputStream())))
 			{
@@ -46,31 +49,37 @@ public class HttpTunnel implements Runnable
 				}
 				if (line.startsWith("Content-Length:"))
 					content_length = Long.parseLong(line.substring(15).trim());
+					else if(line.startsWith("Transfer-Encoding:"))
+						chunked=line.contains("chunked");
 				header.setLength(0);
 			}
 			headers.append("Q-GUID: ".concat(KingCard.getInstance().getQUID()));
 			headers.append("\r\n");
 			headers.append("Q-Token: ".concat(KingCard.getInstance().getQTOKEN()));
 			headers.append("\r\n\r\n");
-			//headers.append("Proxy-Connection: Keep-Alive\r\n\r\n");
-
-			if (content_length > 0)
+			HttpResponse r2l=new HttpResponse(remote.getInputStream(), socket.getOutputStream());
+			r2l.start();
+			remote.getOutputStream().write(headers.toString().getBytes());
+			
+			if(chunked){
+				
+				Chunked chunk=new Chunked(socket.getInputStream(),remote.getOutputStream());
+				chunk.process();
+				remote.shutdownOutput();
+			}
+			else if (content_length > 0)
 			{
-				HttpResponse r2l=new HttpResponse(remote.getInputStream(), socket.getOutputStream());
-				r2l.start();
-				remote.getOutputStream().write(headers.toString().getBytes());
 				Stream l2r=new Stream(socket.getInputStream(), remote.getOutputStream(), content_length);
 				l2r.run();
-				r2l.join();
+				remote.shutdownOutput();
 			}
 			else
 			{
-				HttpResponse r2l=new HttpResponse(remote.getInputStream(), socket.getOutputStream());
-				r2l.start();
-				remote.getOutputStream().write(headers.toString().getBytes());
 				remote.getOutputStream().flush();
-				r2l.join();
+				//remote.shutdownOutput();
 			}
+			r2l.join();
+			socket.shutdownOutput();
 		}
 		catch (Exception e)
 		{}

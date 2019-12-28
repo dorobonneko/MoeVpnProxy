@@ -25,6 +25,8 @@ import android.view.MenuItem;
 import android.widget.EditText;
 import org.vpns.proxy.nethook.KingCard;
 import android.content.DialogInterface;
+import android.text.method.ArrowKeyMovementMethod;
+import android.text.method.ScrollingMovementMethod;
 
 public class MainActivity extends Activity implements Switch.OnCheckedChangeListener
 {
@@ -36,7 +38,10 @@ public class MainActivity extends Activity implements Switch.OnCheckedChangeList
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 		msg=findViewById(R.id.msg);
-		registerReceiver(message=new Message(),new IntentFilter(getPackageName().concat(".Write")));
+		msg.setMovementMethod(new ScrollingMovementMethod());
+		IntentFilter ifilter=new IntentFilter(getPackageName().concat(".Write"));
+		ifilter.addAction(getPackageName().concat(".Clear"));
+		registerReceiver(message=new Message(),ifilter);
     }
 
 	@Override
@@ -115,7 +120,14 @@ public class MainActivity extends Activity implements Switch.OnCheckedChangeList
 		@Override
 		public void onReceive(Context p1, Intent p2)
 		{
+			switch(p2.getAction()){
+				case "com.moe.vpnproxy.Clear":
+					msg.setText(null);
+					break;
+				default:
 			msg.setText(msg.getText()+"\n"+p2.getStringExtra(p2.getAction()));
+			break;
+			}
 		}
 
 	

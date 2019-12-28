@@ -72,7 +72,7 @@ public class LocalVpnService extends VpnService implements Runnable,SharedPrefer
 					Tun2Socks.runTun2Socks(pfd.getFd(),1500,"10.0.0.1","255.255.255.0","127.0.0.1:1080");
 					}
 					}).start();
-					
+		sendBroadcast(new Intent(getPackageName().concat(".Clear")));		
 		write("VPN:Start");
 		}
 		catch (PackageManager.NameNotFoundException e)

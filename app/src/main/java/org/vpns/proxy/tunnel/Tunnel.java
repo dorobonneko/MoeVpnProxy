@@ -64,7 +64,9 @@ public class Tunnel extends Thread
 			Stream r2l=new Stream(remote.getInputStream(),socket.getOutputStream(),Long.MAX_VALUE);
 			r2l.start();
 			l2r.join();
+			remote.shutdownOutput();
 			r2l.join();
+			
 		}
 		catch (Exception e)
 		{}
